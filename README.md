@@ -1,10 +1,9 @@
 #TL;DR
 
 Distributed trace context propagation breaks when tasks are saved in a repository.
-Brave context can be exported to `Map<String, String>` and restored from such a map. This allows to store tracing context
-along with a task in the repository and restore it when the task is executed.
+Brave context can be exported to `Map<String, String>` and restored from such a map. It allows storing tracing context and a task in the repository and restoring it when the task is executed.
 
-An implementation in Kotlin with a sample application is available [here](https://github.com/Worldremit/blog-trace-context-management). 
+An implementation in Kotlin with a sample application is available [here](https://github.com/Worldremit/blog-trace-context-management).
 
 # Background
 
@@ -13,12 +12,12 @@ It is based on a tracing context that is passed with each call.
 The way the context is passed depends on the transport protocol used. The most common way is the usage of headers (REST, messaging).
 
 The management of the tracing context should be transparent to the rest of the service. It should be an aspect shared by all microservices, so the context is not "lost" when a request is sent to a service that does not support tracing.
-Most of the implementations require some configuration, and then tracing propagation magic just happens.
+Most implementations require some configuration and then tracing propagation magic happens.
 
 # Problem
 
-The tracing context propagation works as long as the calls between services are uninterrupted.
-Whenever there is a need to execute some part of the request processing at a later time, the propagation may be broken.
+The tracing context propagation works if the calls between services are uninterrupted.
+The propagation may be broken when a service executes some part of the request later in a different thread.
 An example is saving a task to be executed later in DB. Another one is sending a message using an outbox pattern -
 which means saving a request to send a message in a DB and then sending the actual message asynchronously.
 
@@ -26,7 +25,7 @@ The saving to DB breaks the context propagation as context is only available at 
 of such context with records.
 
 # Solution
-When the context propagation is broken, then it has to be handled by a service.
+
 The service has to do what the library does:
 * store the context whenever data connected with context is saved
 * restore the context from saved data when data is processed
@@ -36,7 +35,7 @@ Inevitably we have to get a bit more familiar with our solution for handling tra
 At WorldRemit, we use [Spring Cloud Sleuth](https://spring.io/projects/spring-cloud-sleuth), which provides Spring Boot auto-configuration for distributed tracing
 based on [Brave](https://github.com/openzipkin/brave), which is a distributed tracing instrumentation library.
 
-As the tracing is handled by Brave, we have to find a way to externalize the context to a format that can be easily serialized and persisted.
+We have to find a way to externalize the context to a format that can be easily serialized and persisted based on Brave API.
 
 ## Functional Programming
 
@@ -78,7 +77,7 @@ entity.tracingContext = jsonTracingContext
 storeEntity(entity)
 ```
 
-We simply serialize the `TracingContext`'s map into JSON and put it into a field of entity stored in DB.
+We serialize the `TracingContext`'s map into JSON and put it into a field of entity stored in DB.
 It's a simplistic solution, but the context is part of the task, and JSON is just good enough for storing a map of strings.
 
 When the task is run, we need to restore the `TracingContext` with the map restored from JSON and run the task
@@ -171,7 +170,7 @@ tracing.propagation().injector(MapRequestSetter).inject(traceContext, request)
 
 ## Running in Context
 
-To restore `TraceContext` from `TracingContext`, we have to do an opposite operation. Provide Brave with prefilled custom request basing on which it will recreate `TraceContext` if possible:
+We have to do an opposite operation to restore `TraceContext` from `TracingContext`. Provide Brave with prefilled custom request basing on which it will recreate `TraceContext` if possible:
 
 ```kotlin
 fun createBraveTraceContext(tracing: Tracing, context: TracingContext): TraceContext? =
@@ -397,9 +396,9 @@ curl --location --request PUT 'http://localhost:8080/users/2ee0b1c1-9fc0-4cbf-ad
 ```
 
 ### Logs
-The logs include trace context, so you can observe that the trace context is correctly "transferred" to actual delivering of the message
+The logs include trace context, so you can observe that the trace context is correctly "transferred" to the thread that performs the actual delivery of the message.
 
-The trace context is logged in fist square brackets, the tread name in next ones. 
+The trace context is logged in the first square brackets, the tread name in the next ones.
 ```shell
 2021-11-10 22:32:20.395  INFO [,fa636d3ed78818d4,fa636d3ed78818d4] [   XNIO-1 I/O-6] c.w.s.user.adapter.rest.UserController   : UserDto: UserDto(login=Amya95, name=NameDto(first=Kareem, middle=Guido, last=Prohaska))
 2021-11-10 22:32:21.411  INFO [,fa636d3ed78818d4,fa636d3ed78818d4] [DefaultExecutor] c.w.sample.user.store.UserStore          : User stored: User(id=UserId(value=49df2a87-36dd-4e91-a45e-916416a03b9f), login=Login(value=Amya95), name=Name(first=FirstName(value=Kareem), middleName=MiddleName(value=Guido), lastName=LastName(value=Prohaska)))
