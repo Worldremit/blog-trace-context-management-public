@@ -298,23 +298,24 @@ When an external request or message reaches our service Sleuth & Brave create ne
 We want to "capture" the MDC and trace contexts into a new coroutine context it is used in further processing.
 
 ```kotlin
-        withContext(MDCContext() + TraceContextElement()) {
-            // processing
-        }   
-
+withContext(MDCContext() + TraceContextElement()) {
+    // processing
+}
 ```
+
 Handling the creation of user
+
 ```kotlin
-    @PutMapping("/{id}")
-    suspend fun sendMessage(@PathVariable id: String, @RequestBody dto: UserDto): ResponseEntity<String> =
-        withContext(MDCContext() + TraceContextElement()) {
-            logger.info { "UserDto: $dto" }
-            val command = CreateUserCommand(UserId(UUID.fromString(id)), Login(dto.login), name(dto.name))
-            createUser(command).fold(
-                { error -> ResponseEntity.badRequest().body("Something went wrong: $error") },
-                { result -> ResponseEntity.ok().body(result.toString()) }
-            )
-        }
+@PutMapping("/{id}")
+suspend fun sendMessage(@PathVariable id: String, @RequestBody dto: UserDto): ResponseEntity<String> =
+    withContext(MDCContext() + TraceContextElement()) {
+        logger.info { "UserDto: $dto" }
+        val command = CreateUserCommand(UserId(UUID.fromString(id)), Login(dto.login), name(dto.name))
+        createUser(command).fold(
+            { error -> ResponseEntity.badRequest().body("Something went wrong: $error") },
+            { result -> ResponseEntity.ok().body(result.toString()) }
+        )
+    }
 ```
 
 ## Outbox
