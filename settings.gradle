@@ -1,0 +1,3 @@
+rootProject.name = 'trace-context-management'
+include 'tracing'
+include 'test-app'
